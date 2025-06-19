@@ -38,7 +38,7 @@ class NetworkSimulatorGUI:
         self.enquadramento_type_var = tk.StringVar(value='Contagem de caracteres')
         self.mod_digital_type_var = tk.StringVar(value='NRZ-Polar')
         self.mod_portadora_type_var = tk.StringVar(value='ASK')
-        self.detecao_erro_type_var = tk.StringVar(value='CRC-32')
+        self.detecao_erro_type_var = tk.StringVar(value='Nenhuma')
         self.correcao_erro_type_var = tk.StringVar(value='Nenhuma') # PADRÃO AGORA É NENHUMA
         self.taxa_erros_var = tk.DoubleVar(value=0.0) # Taxa de erro inicial
 

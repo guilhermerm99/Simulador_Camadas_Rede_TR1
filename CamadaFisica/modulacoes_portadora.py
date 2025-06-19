@@ -5,58 +5,52 @@ import numpy as np
 FS_PORTADORA = 1000
 TEMPO_SIMBOLO = 0.05 # Duração de um símbolo em segundos
 
-def _gerar_portadora(frequencia, amplitude, duracao_simbolo, fase=0):
-    """Auxiliar: Gera uma senoide para a portadora."""
+# --- FUNÇÃO _gerar_portadora REFATORADA ---
+# Removendo o valor padrão para 'fase' na assinatura, forçando a passagem explícita
+def _gerar_portadora(frequencia, amplitude, duracao_simbolo, fase):
+    """Auxiliar: Gera uma senoide para a portadora com fase explícita."""
     t = np.linspace(0, duracao_simbolo, int(FS_PORTADORA * duracao_simbolo), endpoint=False)
     return amplitude * np.sin(2 * np.pi * frequencia * t + fase)
 
+# As funções ask e fsk não usam 'phase', então não precisam de alteração nelas,
+# mas se elas chamassem _gerar_portadora sem fase, teriam que passar fase=0.
+# No nosso código atual, ASK e FSK chamam _gerar_portadora com 3 argumentos, e a fase é ignorada ou não utilizada na chamada.
+# Mas na verdade, ask e fsk *estão* chamando _gerar_portadora com 3 argumentos, e qam_8 com 4.
+# O problema é que a assinatura anterior com fase=0 permitia ambos.
+# Agora, todas as chamadas a _gerar_portadora *terão* que passar o argumento 'fase'.
+
+# Ajustando ask e fsk para passar 'fase=0' explicitamente
 def ask(bits: str) -> list[float]:
-    """
-    Simula Amplitude Shift Keying (ASK).
-    '0' -> amplitude baixa (0)
-    '1' -> amplitude alta (1)
-    """
     signal = []
-    fc = 50 # Frequência da portadora (Hz)
+    fc = 50
     for bit in bits:
         if bit == '1':
-            signal.extend(_gerar_portadora(fc, 1.0, TEMPO_SIMBOLO))
+            signal.extend(_gerar_portadora(fc, 1.0, TEMPO_SIMBOLO, fase=0)) # Passa fase=0 explicitamente
         elif bit == '0':
-            signal.extend(_gerar_portadora(fc, 0.0, TEMPO_SIMBOLO)) # Amplitude zero
+            signal.extend(_gerar_portadora(fc, 0.0, TEMPO_SIMBOLO, fase=0)) # Passa fase=0 explicitamente
         else:
             raise ValueError("Bits devem ser '0' ou '1'")
-    return signal # <-- MUDANÇA AQUI: Retorna a lista diretamente
+    return signal
 
 def fsk(bits: str) -> list[float]:
-    """
-    Simula Frequency Shift Keying (FSK).
-    '0' -> frequência f0
-    '1' -> frequência f1
-    """
     signal = []
-    f0 = 20 # Frequência para '0'
-    f1 = 40 # Frequência para '1'
+    f0 = 20
+    f1 = 40
     for bit in bits:
         if bit == '1':
-            signal.extend(_gerar_portadora(f1, 1.0, TEMPO_SIMBOLO))
+            signal.extend(_gerar_portadora(f1, 1.0, TEMPO_SIMBOLO, fase=0)) # Passa fase=0 explicitamente
         elif bit == '0':
-            signal.extend(_gerar_portadora(f0, 1.0, TEMPO_SIMBOLO))
+            signal.extend(_gerar_portadora(f0, 1.0, TEMPO_SIMBOLO, fase=0)) # Passa fase=0 explicitamente
         else:
             raise ValueError("Bits devem ser '0' ou '1'")
-    return signal # <-- MUDANÇA AQUI: Retorna a lista diretamente
+    return signal
 
 def qam_8(bits: str) -> list[float]:
-    """
-    Simula 8-Quadrature Amplitude Modulation (8-QAM).
-    Agrupa bits em trios (símbolos). Cada trio representa uma combinação de amplitude e fase.
-    Assumimos 3 bits por símbolo (2^3 = 8 símbolos).
-    """
     if len(bits) % 3 != 0:
-        # Adiciona padding se não for múltiplo de 3
         bits = bits.ljust((len(bits) + 2) // 3 * 3, '0')
 
     signal = []
-    fc = 50 # Frequência da portadora
+    fc = 50
     symbol_map = {
         '000': (0.707, 0),
         '001': (0.707, 45),
@@ -72,13 +66,12 @@ def qam_8(bits: str) -> list[float]:
         symbol_bits = bits[i:i+3]
         amplitude, phase_deg = symbol_map.get(symbol_bits, (0, 0))
         phase_rad = np.deg2rad(phase_deg)
-        signal.extend(_gerar_portadora(fc, amplitude, TEMPO_SIMBOLO, phase=phase_rad))
-    return signal # <-- MUDANÇA AQUI: Retorna a lista diretamente
+        signal.extend(_gerar_portadora(fc, amplitude, TEMPO_SIMBOLO, fase=phase_rad)) # Fase já é passada aqui
+    return signal
 
 
 # --- As funções de demodulação não precisam de alteração ---
 def demodular_ask(signal: list[float]) -> str:
-    """Demodula sinal ASK de volta para bits."""
     bits = ""
     amostras_por_simbolo = int(FS_PORTADORA * TEMPO_SIMBOLO)
     for i in range(0, len(signal), amostras_por_simbolo):
@@ -93,7 +86,6 @@ def demodular_ask(signal: list[float]) -> str:
     return bits
 
 def demodular_fsk(signal: list[float]) -> str:
-    """Demodula sinal FSK de volta para bits."""
     bits = ""
     amostras_por_simbolo = int(FS_PORTADORA * TEMPO_SIMBOLO)
     f0 = 20
@@ -118,7 +110,6 @@ def demodular_fsk(signal: list[float]) -> str:
     return bits
 
 def demodular_qam_8(signal: list[float]) -> str:
-    """Demodula sinal 8-QAM de volta para bits."""
     bits = ""
     amostras_por_simbolo = int(FS_PORTADORA * TEMPO_SIMBOLO)
     fc = 50

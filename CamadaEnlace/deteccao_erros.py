@@ -86,13 +86,26 @@ def verificar_crc32(frame_bits: str) -> bool:
     return int(remainder, 2) == 0 # Retorna True se o resto for zero
 
 
+# --- Funções para a opção 'Nenhuma' na detecção de erros ---
+def nenhuma_deteccao_tx(data_bits: str) -> str:
+    """Função placeholder para 'Nenhuma' detecção de erros no Tx."""
+    return data_bits
+
+def nenhuma_deteccao_rx(frame_bits: str) -> bool:
+    """Função placeholder para 'Nenhuma' detecção de erros no Rx. Sempre retorna True (sem erro)."""
+    print("  Detecção de Erros: Nenhuma. Presumindo ausência de erro.")
+    return True # Assume que não há erro detectado se não há mecanismo
+
+
 # Mapeamento para uso no simulador
 DETECCAO_ERROS_TX = {
     'Bit de paridade par': adicionar_paridade_par,
-    'CRC-32': adicionar_crc32
+    'CRC-32': adicionar_crc32,
+    'Nenhuma': nenhuma_deteccao_tx # Adiciona a opção 'Nenhuma'
 }
 
 DETECCAO_ERROS_RX = {
     'Bit de paridade par': verificar_paridade_par,
-    'CRC-32': verificar_crc32
+    'CRC-32': verificar_crc32,
+    'Nenhuma': nenhuma_deteccao_rx # Adiciona a opção 'Nenhuma'
 }
