@@ -15,8 +15,14 @@
 
 ### 1. Clone o repositório
 
-```
+#### Clonar o repositório:
+
+```bash
 git clone https://github.com/guilhermerm99/Simulador_Camadas_Rede_TR1.git
+```
+
+#### Ir para o `path` do projeto clonado:
+```bash
 cd Simulador_Camadas_Rede_TR1
 ```
 
