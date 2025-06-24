@@ -1,0 +1,20 @@
+# Ambientes virtuais
+venv/
+venv_windows/
+
+# Arquivos temporários
+__pycache__/
+*.py[cod]
+*.log
+*.sqlite3
+
+# Arquivos do VSCode
+.vscode/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Outros
+.DS_Store
+*.swp
+*.bak
