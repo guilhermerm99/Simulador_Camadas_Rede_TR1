@@ -97,9 +97,11 @@ class Framer:
         logger.debug(f"deframe_byte_stuffing: saída payload destuffed len={len(payload_destuffed_bits)} bits")
         return payload_destuffed_bits, "OK"
 
+    # <<< INÍCIO DA CORREÇÃO >>>
     def frame_bit_stuffing(self, payload_bits):
         logger.debug(f"frame_bit_stuffing: entrada payload_bits len={len(payload_bits)}")
-        stuffed_payload = payload_bits.replace('011111', '0111110')
+        # Regra correta: insere um '0' após cinco '1's consecutivos.
+        stuffed_payload = payload_bits.replace('11111', '111110')
         frame = self.FLAG_BIT_PATTERN + stuffed_payload + self.FLAG_BIT_PATTERN
         logger.debug(f"frame_bit_stuffing: saída frame len={len(frame)}")
         return frame
@@ -111,6 +113,8 @@ class Framer:
             return None, "Erro de enquadramento: Flag de início ou fim não encontrada."
         
         stuffed_payload = frame_bits[len(self.FLAG_BIT_PATTERN):-len(self.FLAG_BIT_PATTERN)]
-        destuffed_payload = stuffed_payload.replace('0111110', '011111')
+        # Regra correta: remove o '0' que sucede cinco '1's consecutivos.
+        destuffed_payload = stuffed_payload.replace('111110', '11111')
         logger.debug(f"deframe_bit_stuffing: saída payload len={len(destuffed_payload)}")
         return destuffed_payload, "OK"
+    # <<< FIM DA CORREÇÃO >>>

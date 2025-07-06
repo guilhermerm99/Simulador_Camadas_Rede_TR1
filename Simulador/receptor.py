@@ -1,4 +1,4 @@
-# Simulador/receptor.py
+#Simulador/receptor.py
 
 import socket
 import sys
@@ -6,9 +6,10 @@ import numpy as np
 import time
 import logging
 import time as time_module
+
 logging.getLogger('matplotlib.font_manager').setLevel(logging.WARNING)
 logging.getLogger('PIL.PngImagePlugin').setLevel(logging.WARNING)
-logging.getLogger('matplotlib.font_manager').setLevel(logging.WARNING)
+
 sys.path.append('../')
 
 from Utilidades import utils
@@ -19,7 +20,7 @@ from CamadaFisica.modulacoes_portadora import CarrierModulator
 
 HOST = '127.0.0.1'
 PORT = 65432
-FATOR_AMPLIFICACAO_RUIDO = 10.0
+FATOR_AMPLIFICACAO_RUIDO = 150.0
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -56,6 +57,7 @@ def run_receiver(update_callback):
             with conn:
                 start_time = time_module.time()
 
+                # Receber metadados
                 metadata_str = conn.recv(1024).decode('utf-8')
                 if not metadata_str:
                     logger.warning("Metadados vazios recebidos, ignorando conexão.")
@@ -63,8 +65,13 @@ def run_receiver(update_callback):
 
                 logger.info(f"Metadados recebidos: {metadata_str}")
                 parts = metadata_str.split('|')
-                if len(parts) < 12:
-                    raise ValueError("Metadados incompletos recebidos.")
+                # CORREÇÃO: Espera 14 partes, incluindo o novo campo 'original_message_len_bits'
+                if len(parts) < 14:
+                    raise ValueError(f"Metadados incompletos recebidos: esperado >=14 partes, recebeu {len(parts)}")
+
+                # Indices: 0:msg, 1:enq, ..., 11:payload_len, 12:qam_pad, 13:original_message_len
+                qam_pad = int(parts[12]) if parts[12].isdigit() else 0
+                original_message_len_bits = int(parts[13]) if parts[13].isdigit() else 0
 
                 config = {
                     "message": parts[0],
@@ -78,11 +85,14 @@ def run_receiver(update_callback):
                     "freq_base": int(parts[8]),
                     "amplitude": float(parts[9]),
                     "sampling_rate": int(parts[10]),
-                    "original_payload_len": int(parts[11])
+                    "original_payload_len": int(parts[11]),
+                    "qam_pad": qam_pad,
+                    "original_message_len_bits": original_message_len_bits
                 }
                 logger.debug(f"Configurações extraídas dos metadados: {config}")
                 update_callback({'type': 'received_configs', 'data': config})
 
+                # Receber sinal modulado (bytes)
                 logger.info("Iniciando recepção do sinal modulado (bytes)...")
                 signal_bytes = b""
                 while True:
@@ -96,6 +106,7 @@ def run_receiver(update_callback):
                 received_signal = np.frombuffer(signal_bytes, dtype=np.float32)
                 logger.info(f"Sinal convertido para array numpy com {len(received_signal)} amostras float32")
 
+                # Adicionar ruído se configurado
                 taxa_erros = config["taxa_erros"]
                 if taxa_erros > 0 and len(received_signal) > 0:
                     energia_media = np.mean(received_signal ** 2)
@@ -113,10 +124,16 @@ def run_receiver(update_callback):
                     'config': config
                 }})
 
+                # Demodulação
                 logger.info("Iniciando demodulação do sinal...")
                 modulator = CarrierModulator(config["bit_rate"], config["freq_base"], config["amplitude"], config["sampling_rate"])
-                demodulated_bits, digital_signal_rx, t_digital_rx = modulator.demodulate(noisy_signal, config)
+                demodulated_bits, digital_signal_rx, t_digital_rx = modulator.demodulate(noisy_signal, config['mod_portadora_type'], config)
                 logger.info(f"Demodulação concluída, {len(demodulated_bits)} bits recuperados")
+
+                # Remover padding da 8-QAM
+                if config["qam_pad"] > 0:
+                    demodulated_bits = demodulated_bits[:-config["qam_pad"]]
+                    logger.info(f"Bits de padding removidos após demodulação: {config['qam_pad']} bits")
 
                 update_callback({'type': 'plot', 'tab': 'post_demod', 'data': {
                     't': t_digital_rx,
@@ -124,6 +141,7 @@ def run_receiver(update_callback):
                     'config': config
                 }})
 
+                # Desenquadramento
                 logger.info(f"Iniciando desenquadramento com método '{config['enquadramento_type']}'")
                 framer = Framer()
                 enquadramento = config['enquadramento_type']
@@ -137,46 +155,85 @@ def run_receiver(update_callback):
 
                 if payload is None:
                     raise ValueError("Erro no desenquadramento - payload nulo.")
+                logger.info(f"Payload extraído do quadro com {len(payload)} bits")
 
-                payload = payload[:config['original_payload_len']]
-                logger.info(f"Payload extraído com {len(payload)} bits")
-
+                # Correção de erros
                 error_detector = ErrorDetector()
                 error_corrector = ErrorCorrector()
-                dados_para_corrigir = payload
-                detecao_ok = True
-
-                tipo_erro = config["detecao_erro_type"]
-                logger.info(f"Tipo de detecção de erro configurado: {tipo_erro}")
-
-                if tipo_erro == "CRC-32":
-                    if len(payload) < 32:
-                        raise ValueError("Payload menor que tamanho CRC-32")
-                    dados_para_corrigir = payload[:-32]
-                elif tipo_erro == "Paridade Par":
-                    if len(payload) % 9 != 0:
-                        raise ValueError("Tamanho inválido para paridade par")
-                    chunks = [payload[i:i+9] for i in range(0, len(payload), 9)]
-                    erros = sum(1 for c in chunks if not error_detector.check_even_parity(c))
-                    dados_para_corrigir = "".join(c[:-1] for c in chunks)
-                    detecao_ok = (erros == 0)
-                    logger.info(f"Detecção por paridade par: {erros} erros detectados")
 
                 if config["correcao_erro_type"] == "Hamming":
                     logger.info("Iniciando decodificação e correção pelo código Hamming")
-                    dados_decodificados, quadro_corrigido, relatorio_hamming = error_corrector.decode_hamming(dados_para_corrigir)
+                    data_after_correction, _, relatorio_hamming = error_corrector.decode_hamming(payload)
                     logger.info(f"Relatório Hamming: {relatorio_hamming}")
                 else:
-                    dados_decodificados = quadro_corrigido = dados_para_corrigir
+                    data_after_correction = payload
                     relatorio_hamming = "N/A (correção desativada)"
                     logger.info("Correção de erros desativada")
 
                 update_callback({'type': 'hamming_status', 'message': relatorio_hamming, 'color': 'blue' if 'corrigido' in relatorio_hamming else 'black'})
 
+                # Detecção de erros
+                tipo_erro = config["detecao_erro_type"]
+                logger.info(f"Tipo de detecção de erro configurado: {tipo_erro}")
+                detecao_ok = False
+                dados_decodificados = ""
+
+                if tipo_erro == "CRC-32":
+                    if len(data_after_correction) < 32:
+                        raise ValueError("Dados corrigidos menores que tamanho do CRC-32 (32 bits)")
+
+                    dados_decodificados = data_after_correction[:-32]
+                    crc_recebido = data_after_correction[-32:]
+                    crc_gerado = error_detector.generate_crc(dados_decodificados)
+                    detecao_ok = (crc_gerado == crc_recebido)
+
+                    logger.info(f"CRC gerado (recalculado): {crc_gerado}")
+                    logger.info(f"CRC recebido: {crc_recebido}")
+                    logger.info(f"Validação CRC: {'OK' if detecao_ok else 'INVÁLIDO'}")
+                    update_callback({'type': 'detection_result', 'data': {
+                        'method': 'CRC-32',
+                        'status': 'OK' if detecao_ok else 'INVÁLIDO',
+                        'calc': int(crc_gerado, 2),
+                        'recv': int(crc_recebido, 2),
+                    }})
+
+                elif tipo_erro == "Paridade Par":
+                    # CORREÇÃO: Ajusta a lógica para o esquema 8 bits (7+1).
+                    if len(data_after_correction) % 8 != 0:
+                        raise ValueError("Tamanho de dados inválido para verificação de paridade par (esquema 8-bit)")
+
+                    chunks = [data_after_correction[i:i+8] for i in range(0, len(data_after_correction), 8)]
+                    erros = sum(1 for c in chunks if not error_detector.check_even_parity(c))
+                    # Extrai os 7 bits de dados de cada bloco de 8 bits.
+                    dados_decodificados = "".join(c[:-1] for c in chunks)
+                    detecao_ok = (erros == 0)
+
+                    logger.info(f"Detecção por paridade par: {erros} erros detectados")
+                    update_callback({'type': 'detection_result', 'data': {
+                        'method': 'Paridade Par',
+                        'status': "OK" if detecao_ok else f"INVÁLIDO ({erros} erros)"
+                    }})
+
+                else:
+                    detecao_ok = True
+                    dados_decodificados = data_after_correction
+                    update_callback({'type': 'detection_result', 'data': {'method': 'Nenhuma', 'status': 'N/A'}})
+
+                if detecao_ok:
+                    # CORREÇÃO: Remove o padding usando o comprimento original da mensagem.
+                    if config['original_message_len_bits'] > 0:
+                        dados_decodificados = dados_decodificados[:config['original_message_len_bits']]
+                    mensagem_final = utils.binary_to_text(dados_decodificados)
+                else:
+                    mensagem_final = "ERRO: DADOS CORROMPIDOS."
+
+                # Comparação com bits originais para estatísticas
                 ideal_bits = [int(b) for b in utils.text_to_binary(config["message"])]
                 corrected_bits = [int(b) for b in dados_decodificados]
                 min_len = min(len(ideal_bits), len(corrected_bits))
-                num_erros = sum(1 for a, b in zip(ideal_bits[:min_len], corrected_bits[:min_len]) if a != b)
+                num_erros = sum(1 for a, b in zip(ideal_bits[:min_len], corrected_bits[:min_len]) if a != b) + abs(len(ideal_bits) - len(corrected_bits))
+
+                logger.info(f"Diferenças após correção (ideal vs decodificado): {num_erros} bits diferentes")
 
                 update_callback({'type': 'plot', 'tab': 'heatmap_errors', 'data': {
                     'ideal': ideal_bits[:min_len],
@@ -184,57 +241,6 @@ def run_receiver(update_callback):
                     'errors': [int(a != b) for a, b in zip(ideal_bits[:min_len], corrected_bits[:min_len])],
                     't': t_digital_rx[:min_len]
                 }})
-
-                logger.info(f"Diferenças após correção (ideal vs corrigido): {num_erros} bits diferentes")
-
-                update_callback({'type': 'plot', 'tab': 'error_corrected', 'data': {
-                    'ideal_bits': ideal_bits[:min_len],
-                    'corrected_bits': corrected_bits[:min_len],
-                    't_ideal': t_digital_rx[:min_len]
-                }})
-
-                update_callback({'type': 'plot', 'tab': 'error', 'data': {
-                    'ideal_bits': ideal_bits[:min_len],
-                    'received_bits': [int(b) for b in demodulated_bits[:min_len]],
-                    't_ideal': t_digital_rx[:min_len]
-                }})
-
-                update_callback({'type': 'plot', 'tab': 'corrected_bits', 'data': {
-                    't': t_digital_rx[:len(quadro_corrigido)],
-                    'signal': [1 if bit == '1' else -1 for bit in quadro_corrigido],
-                    'config': config
-                }})
-
-                mensagem_final = ""
-                decisiva = False
-                if tipo_erro == "CRC-32":
-                    crc_gerado = error_detector.generate_crc(quadro_corrigido)
-                    crc_ok = (crc_gerado == payload[-32:])
-                    logger.info(f"CRC gerado: {crc_gerado}")
-                    logger.info(f"CRC recebido: {payload[-32:]}")
-                    logger.info(f"Validação CRC: {'OK' if crc_ok else 'INVÁLIDO'}")
-
-                    if not error_detector.generate_crc(dados_para_corrigir) == payload[-32:]:
-                        decisiva = True
-
-                    update_callback({'type': 'detection_result', 'data': {
-                        'method': 'CRC-32',
-                        'status': 'OK' if crc_ok else 'INVÁLIDO',
-                        'calc': int(crc_gerado, 2),
-                        'recv': int(payload[-32:], 2),
-                        'correcao_decisiva': decisiva
-                    }})
-
-                    mensagem_final = utils.binary_to_text(dados_decodificados) if crc_ok else "ERRO: DADOS CORROMPIDOS."
-                elif tipo_erro == "Paridade Par":
-                    update_callback({'type': 'detection_result', 'data': {
-                        'method': 'Paridade Par',
-                        'status': "OK" if detecao_ok else f"INVÁLIDO ({erros} erros)"
-                    }})
-                    mensagem_final = utils.binary_to_text(dados_decodificados) if detecao_ok else "ERRO: DADOS CORROMPIDOS."
-                else:
-                    update_callback({'type': 'detection_result', 'data': {'method': 'Nenhuma', 'status': 'N/A'}})
-                    mensagem_final = utils.binary_to_text(dados_decodificados)
 
                 total_time = time_module.time() - start_time
                 update_callback({'type': 'final_message', 'message': mensagem_final})
@@ -244,7 +250,6 @@ def run_receiver(update_callback):
                     'bits_erro_corrigidos': relatorio_hamming,
                     'total_erros': num_erros,
                     'tempo_total': total_time,
-                    'correcao_decisiva': decisiva
                 }})
                 logger.info(f"Mensagem final decodificada: {format_log(mensagem_final, max_len=120)}")
 
