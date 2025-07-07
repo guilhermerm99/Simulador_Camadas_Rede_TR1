@@ -6,7 +6,7 @@ import numpy as np
 import time
 import logging
 
-# Adiciona o diretório pai ao caminho de busca de módulos do Python.
+# Adiciona o diretório pai ao caminho de busca de módulos para permitir importações locais.
 # Isso garante que o Python encontre os módulos das subpastas (e.g., CamadaEnlace, Utilidades).
 sys.path.append('../')
 
@@ -73,6 +73,9 @@ def run_transmitter(params, update_callback):
         }
         # A taxa de amostragem é definida como 20 vezes a taxa de bits para garantir boa resolução do sinal.
         config["sampling_rate"] = config["bit_rate"] * 20
+        # O número de amostras por bit é derivado da taxa de amostragem e taxa de bits.
+        samples_per_bit = config["sampling_rate"] // config["bit_rate"]
+
 
         # Instanciação dos objetos que representam as funcionalidades de cada camada.
         error_detector = ErrorDetector()
@@ -176,7 +179,8 @@ def run_transmitter(params, update_callback):
         # 6. Codificação Digital (Sinalização em Banda Base).
         # Converte a string de bits do 'frame' em um sinal digital (forma de onda em banda base).
         # Este processo mapeia bits para níveis de tensão ou pulsos, como NRZ-Polar, Manchester ou Bipolar.
-        digital_signal_plot = digital_encoder.encode(frame, config["mod_digital_type"])
+        # Passa 'samples_per_bit' explicitamente para garantir o número correto de amostras por bit.
+        digital_signal_plot = digital_encoder.encode(frame, config["mod_digital_type"], samples_per_bit)
         logger.info("5. (Física) Codificação de linha gerada para visualização.")
         update_callback({'type': 'log', 'message': f"5. (Física) Codificação de linha aplicada: {config['mod_digital_type']}."})
 
@@ -204,7 +208,7 @@ def run_transmitter(params, update_callback):
             t_analog, analog_signal, *qam_points = modulator.modulate(signal_source, mod_portadora)
             logger.info("6. (Física) Modulação por portadora aplicada.")
             update_callback({'type': 'log', 'message': f"6. (Física) Modulação de portadora aplicada: {mod_portadora}."})
-        elif mod_portadora == "Nenhum": # NOVO: Caso a modulação por portadora seja "Nenhum"
+        elif mod_portadora == "Nenhum": # Caso a modulação por portadora seja "Nenhum"
             # Se não há modulação de portadora, o sinal "analógico" é o próprio sinal digital em banda base.
             # O `signal_source` deve ser a forma de onda digital (digital_signal_plot)
             signal_source_for_analog = digital_signal_plot # Usa o sinal digital diretamente como "analógico".
@@ -254,6 +258,10 @@ def run_transmitter(params, update_callback):
             # Envia os metadados codificados em UTF-8.
             s.sendall(final_metadata_str.encode('utf-8'))
             time.sleep(0.1) # Pequena pausa para garantir que os metadados sejam processados antes do sinal.
+            # ADIÇÃO PARA DEBUG: Verifica o tamanho do sinal analógico antes de enviar.
+            logger.info(f"DEBUG: Transmissor - Tamanho do analog_signal antes de enviar: {len(analog_signal)} amostras")
+            logger.info(f"DEBUG: Transmissor - Total de bytes a enviar: {len(analog_signal.astype(np.float32).tobytes())} bytes")
+
             # Envia o sinal analógico modulado, convertido para bytes de float32.
             s.sendall(analog_signal.astype(np.float32).tobytes())
 
