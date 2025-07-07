@@ -1,9 +1,12 @@
 # Simulador_Camadas_Rede_TR1
- Simulador das camadas Física e de Enlace para a disciplina de Teleinformática e Redes 1 (TR1).
+
+Simulador das camadas Física e de Enlace para a disciplina de **Teleinformática e Redes 1 (TR1)**.
+
+Permite simular técnicas essenciais como enquadramento (byte stuffing, bit stuffing, contagem de caracteres), modulação digital e analógica, e métodos de detecção e correção de erros, como paridade e CRC.
 
 ---
 
-## 🧱 Requisitos
+## 🧱 Pré-requisitos
 
 - Python **3.10 ou superior**
 - Git (para clonar o projeto)
@@ -11,26 +14,27 @@
 
 ---
 
-## ⚙️ Etapas de Instalação
+## ⚙️ Instalação
 
 ### 1. Clone o repositório
 
-#### Clonar o repositório:
+Clone o repositório usando:
 
 ```bash
 git clone https://github.com/guilhermerm99/Simulador_Camadas_Rede_TR1.git
 ```
 
-#### Ir para o `path` do projeto clonado:
+Entre na pasta criada:
+
 ```bash
 cd Simulador_Camadas_Rede_TR1
 ```
 
---- 
+---
 
-### 2. Crie um ambiente virtual (opcional, mas recomendado)
+### 2. Crie e ative um ambiente virtual (recomendado)
 
-> O ambiente virtual **evita conflitos** de **dependências com outros projetos**.
+> Um ambiente virtual **evita conflitos** de dependências com outros projetos Python.
 
 #### Linux/macOS:
 
@@ -50,44 +54,48 @@ python -m venv venv
 
 ### 3. Instale as dependências
 
-O projeto possui um arquivo `requirements.txt` com todas as bibliotecas utilizadas no projeto. Para instalá-las:
+O projeto contém um arquivo `requirements.txt` com todas as dependências necessárias:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-> Caso adicione uma nova biblioteca, o `requerements.txt` será atualizado automátiamente.
+> **Nota:** O arquivo `requirements.txt` é atualizado automaticamente ao adicionar novas dependências.
 
 ---
 
 ## ▶️ Executando o Simulador
 
-Com o ambiente ativado e as dependências instaladas, execute:
+Com o ambiente virtual ativado e dependências instaladas, acesse a pasta da interface gráfica:
 
 ```bash
-python3 InterfaceGUI/interface_tkinter.py
+cd InterfaceGUI
 ```
 
-Ou no Windows (caso use `python` em vez de `python3`):
+Execute o transmissor e o receptor em terminais separados:
 
-```powershell
-python InterfaceGUI/interface_tkinter.py
+### 🛰️ Transmissor:
+```bash
+python gui_transmissor.py
 ```
 
-A interface gráfica será aberta, permitindo simular diferentes técnicas de enquadramento, modulação e controle de erros.
+### 📡 Receptor:
+```bash
+python gui_receptor.py
+```
+
+Uma interface gráfica será aberta permitindo simular técnicas como enquadramento, modulação digital e analógica, além de métodos para controle de erros como paridade e CRC.
 
 ---
 
-## 🙋‍♂️ Erros Frequentes
+## 🙋‍♂️ Problemas Comuns
 
-- **Não tenho o `venv` no Linux**
-  Rode:
+- **Ambiente virtual (`venv`) indisponível no Linux:**
   ```bash
   sudo apt install python3-venv
   ```
 
-- **Erro com o `tkinter`**
-  No Linux, instale via:
+- **Erro com o módulo gráfico `tkinter` (Linux):**
   ```bash
   sudo apt install python3-tk
   ```
@@ -96,10 +104,10 @@ A interface gráfica será aberta, permitindo simular diferentes técnicas de en
 
 ## 🧼 Arquivos ignorados
 
-Este projeto já possui `.gitignore` configurado para ignorar:
+Este projeto utiliza `.gitignore` para excluir automaticamente do controle de versão:
 
 - Ambientes virtuais (`venv/`)
-- Arquivos temporários e de cache
-- Arquivos de sistema específicos
+- Arquivos temporários, cache, logs
+- Arquivos específicos do sistema operacional
 
 ---
