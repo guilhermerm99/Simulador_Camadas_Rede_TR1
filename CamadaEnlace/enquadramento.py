@@ -1,20 +1,28 @@
 import logging
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)  # Configure o nível conforme necessidade
+logger.setLevel(logging.DEBUG)  # Ajustável conforme necessidade (DEBUG, INFO, ERROR, etc.)
 
 class Framer:
-    """Gerencia as três técnicas clássicas de enquadramento de dados."""
-    
-    FLAG_BIT_PATTERN = "01111110"
-    FLAG_BYTE = 0x7E
-    ESC_BYTE = 0x7D
+    """Gerencia técnicas de enquadramento de dados na Camada de Enlace:
+    - Contagem de caracteres
+    - Byte stuffing
+    - Bit stuffing
+    """
+
+    FLAG_BIT_PATTERN = "01111110"  # Usado como delimitador de quadros (bit stuffing)
+    FLAG_BYTE = 0x7E               # 01111110 em decimal, usado como delimitador de quadros (byte stuffing)
+    ESC_BYTE = 0x7D                # Byte de escape em byte stuffing (125 em decimal)
 
     def frame_char_count(self, payload_bits):
+        """
+        Aplica a técnica de contagem de caracteres.
+        Insere um cabeçalho de 8 bits representando o número de bytes do payload.
+        """
         logger.debug(f"frame_char_count: entrada payload_bits len={len(payload_bits)}")
         if len(payload_bits) % 8 != 0:
             padding = 8 - (len(payload_bits) % 8)
-            payload_bits += '0' * padding
+            payload_bits += '0' * padding  # Completa para múltiplo de 8 bits (1 byte)
             logger.debug(f"frame_char_count: adicionado padding de {padding} bits")
 
         num_bytes = len(payload_bits) // 8
@@ -22,23 +30,33 @@ class Framer:
             logger.error("frame_char_count: Payload excede o tamanho máximo de 255 bytes")
             raise ValueError("Payload excede o tamanho máximo de 255 bytes.")
         
-        header = format(num_bytes, '08b')
+        header = format(num_bytes, '08b')  # Cabeçalho com o número de bytes
         frame = header + payload_bits
         logger.debug(f"frame_char_count: saída frame len={len(frame)}")
         return frame
 
     def deframe_char_count(self, frame_bits):
+        """
+        Remove o cabeçalho de contagem de caracteres e extrai o payload original.
+        Retorna também os bits restantes, caso existam.
+        """
         logger.debug(f"deframe_char_count: entrada frame_bits len={len(frame_bits)}")
         header_bits = frame_bits[:8]
         payload_len_in_bytes = int(header_bits, 2)
         payload_len_in_bits = payload_len_in_bytes * 8
-        
+
         payload = frame_bits[8 : 8 + payload_len_in_bits]
         remaining_frame = frame_bits[8 + payload_len_in_bits:]
         logger.debug(f"deframe_char_count: payload len={len(payload)}, restante len={len(remaining_frame)}")
         return payload, remaining_frame
 
     def frame_byte_stuffing(self, payload_bits):
+        """
+        Aplica byte stuffing:
+        - Converte bits em bytes
+        - Adiciona FLAG no início/fim
+        - Usa ESC para bytes de controle (FLAG/ESC) no payload
+        """
         logger.debug(f"frame_byte_stuffing: entrada payload_bits len={len(payload_bits)}")
         padding_needed = len(payload_bits) % 8
         if padding_needed != 0:
@@ -52,16 +70,21 @@ class Framer:
         stuffed_payload = []
         for byte in payload_bytes:
             if byte == self.FLAG_BYTE or byte == self.ESC_BYTE:
-                stuffed_payload.append(self.ESC_BYTE)
+                stuffed_payload.append(self.ESC_BYTE)  # Insere escape antes de FLAG ou ESC
                 logger.debug(f"frame_byte_stuffing: byte {byte:#04x} escapado")
             stuffed_payload.append(byte)
-        
+
         final_frame_bytes = [self.FLAG_BYTE] + stuffed_payload + [self.FLAG_BYTE]
         frame_bits = "".join(format(byte, '08b') for byte in final_frame_bytes)
         logger.debug(f"frame_byte_stuffing: saída frame_bits len={len(frame_bits)}")
         return frame_bits
 
     def deframe_byte_stuffing(self, frame_bits):
+        """
+        Remove o enquadramento byte stuffing:
+        - Verifica flags de início/fim
+        - Remove bytes de escape (ESC) se precedem FLAG ou ESC
+        """
         logger.debug(f"deframe_byte_stuffing: entrada frame_bits len={len(frame_bits)}")
 
         if len(frame_bits) % 8 != 0:
@@ -74,21 +97,21 @@ class Framer:
         frame_bytes = [int(frame_bits[i:i+8], 2) for i in range(0, len(frame_bits), 8)]
         logger.debug(f"deframe_byte_stuffing: convertido em {len(frame_bytes)} bytes")
 
-        payload_with_stuffing = frame_bytes[1:-1]
+        payload_with_stuffing = frame_bytes[1:-1]  # Remove as flags
         destuffed_payload = []
         is_escaped = False
 
         for i, byte in enumerate(payload_with_stuffing):
             if is_escaped:
-                destuffed_payload.append(byte)
+                destuffed_payload.append(byte)  # Byte seguinte ao ESC é mantido
                 is_escaped = False
                 logger.debug(f"deframe_byte_stuffing: byte {byte:#04x} pós escape no índice {i}")
             elif byte == self.ESC_BYTE:
-                is_escaped = True
+                is_escaped = True  # Próximo byte será escapado
                 logger.debug(f"deframe_byte_stuffing: byte escape detectado no índice {i}")
             else:
                 destuffed_payload.append(byte)
-        
+
         if is_escaped:
             logger.error("deframe_byte_stuffing: erro - byte de escape no final do quadro")
             return None, "Erro de enquadramento: byte de escape no final do quadro."
@@ -97,24 +120,30 @@ class Framer:
         logger.debug(f"deframe_byte_stuffing: saída payload destuffed len={len(payload_destuffed_bits)} bits")
         return payload_destuffed_bits, "OK"
 
-    # <<< INÍCIO DA CORREÇÃO >>>
     def frame_bit_stuffing(self, payload_bits):
+        """
+        Aplica bit stuffing:
+        - Insere um '0' após cinco bits '1' consecutivos no payload
+        - Adiciona flags de delimitação no início e no fim
+        """
         logger.debug(f"frame_bit_stuffing: entrada payload_bits len={len(payload_bits)}")
-        # Regra correta: insere um '0' após cinco '1's consecutivos.
-        stuffed_payload = payload_bits.replace('11111', '111110')
+        stuffed_payload = payload_bits.replace('11111', '111110')  # Regra do bit stuffing
         frame = self.FLAG_BIT_PATTERN + stuffed_payload + self.FLAG_BIT_PATTERN
         logger.debug(f"frame_bit_stuffing: saída frame len={len(frame)}")
         return frame
 
     def deframe_bit_stuffing(self, frame_bits):
+        """
+        Remove enquadramento por bit stuffing:
+        - Verifica presença de flags
+        - Remove um '0' após cada sequência de cinco '1's
+        """
         logger.debug(f"deframe_bit_stuffing: entrada frame_bits len={len(frame_bits)}")
         if not frame_bits.startswith(self.FLAG_BIT_PATTERN) or not frame_bits.endswith(self.FLAG_BIT_PATTERN):
             logger.error("deframe_bit_stuffing: erro - flags de início ou fim não encontradas")
             return None, "Erro de enquadramento: Flag de início ou fim não encontrada."
-        
+
         stuffed_payload = frame_bits[len(self.FLAG_BIT_PATTERN):-len(self.FLAG_BIT_PATTERN)]
-        # Regra correta: remove o '0' que sucede cinco '1's consecutivos.
         destuffed_payload = stuffed_payload.replace('111110', '11111')
         logger.debug(f"deframe_bit_stuffing: saída payload len={len(destuffed_payload)}")
         return destuffed_payload, "OK"
-    # <<< FIM DA CORREÇÃO >>>

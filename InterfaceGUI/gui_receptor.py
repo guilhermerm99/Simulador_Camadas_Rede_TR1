@@ -12,20 +12,28 @@ from Simulador import receptor
 
 class ReceptorGUI(ttk.Frame):
     def __init__(self, master):
+        """
+        Inicializa a interface gráfica do receptor.
+        Configura variáveis, widgets e inicia thread para escutar dados.
+        """
         super().__init__(master, padding="10")
         self.master = master
         self.master.title("Simulador de Transmissão - Receptor (Rx)")
         self.master.geometry("1200x800")
         self.pack(fill=tk.BOTH, expand=True)
 
-        self.update_queue = queue.Queue()
+        self.update_queue = queue.Queue()  # Fila para comunicação thread->GUI
         self._create_variables()
         self._create_widgets()
 
-        self.start_listening_thread()
-        self.process_queue()
+        self.start_listening_thread()  # Inicia thread para receber dados
+        self.process_queue()           # Começa processamento periódico da fila
 
     def _create_variables(self):
+        """
+        Inicializa variáveis Tkinter (StringVar) para armazenar textos
+        que serão exibidos e atualizados dinamicamente na interface.
+        """
         self.connection_status_var = tk.StringVar(value="Iniciando...")
         self.decode_status_var = tk.StringVar(value="Inativo")
         self.detection_method_var = tk.StringVar(value="Detecção:")
@@ -44,6 +52,11 @@ class ReceptorGUI(ttk.Frame):
         self.received_error_rate_var = tk.StringVar(value="N/A")
 
     def _create_widgets(self):
+        """
+        Cria todos os elementos gráficos da interface:
+        - Painel esquerdo com configurações e status
+        - Painel direito com abas para gráficos do sinal recebido
+        """
         self.grid_columnconfigure(0, weight=1, minsize=450)
         self.grid_columnconfigure(1, weight=2)
         self.grid_rowconfigure(0, weight=1)
@@ -51,9 +64,11 @@ class ReceptorGUI(ttk.Frame):
         left_panel = ttk.Frame(self)
         left_panel.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
 
+        # Grupo para exibir configurações recebidas do transmissor
         received_config_frame = ttk.LabelFrame(left_panel, text="Configurações Recebidas", padding="10")
         received_config_frame.pack(fill=tk.X, pady=5)
         received_config_frame.grid_columnconfigure(1, weight=1)
+
         configs = [
             ("Enquadramento:", self.received_enquadramento_var),
             ("Mod. Digital:", self.received_mod_digital_var),
@@ -66,17 +81,23 @@ class ReceptorGUI(ttk.Frame):
             ("Taxa Amostragem:", self.received_sampling_rate_var),
             ("Taxa de Erros Aplicada:", self.received_error_rate_var)
         ]
+
+        # Cria labels para cada configuração recebida
         for i, (label, var) in enumerate(configs):
             ttk.Label(received_config_frame, text=label).grid(row=i, column=0, sticky="w", padx=2, pady=1)
             ttk.Label(received_config_frame, textvariable=var, foreground="#333").grid(row=i, column=1, sticky="w", padx=2, pady=1)
 
+        # Grupo para mostrar status atual do processamento do sinal
         status_process_frame = ttk.LabelFrame(left_panel, text="Status do Processamento", padding="10")
         status_process_frame.pack(fill=tk.X, pady=10)
         status_process_frame.grid_columnconfigure(1, weight=1)
+
+        # Cria linhas de status com labels dinâmicos
         self.connection_status_label = self.create_status_row(status_process_frame, 0, "Status Conexão:", self.connection_status_var)
         self.decode_status_label = self.create_status_row(status_process_frame, 1, "Status Decodificação:", self.decode_status_var)
         self.hamming_status_label = self.create_status_row(status_process_frame, 2, "Status Hamming:", self.hamming_status_var)
 
+        # Labels para status detalhado de detecção de erro
         self.detection_method_label = ttk.Label(status_process_frame, textvariable=self.detection_method_var)
         self.detection_method_label.grid(row=3, column=0, sticky="w", padx=2, pady=1)
         self.detection_status_label = ttk.Label(status_process_frame, textvariable=self.detection_status_var)
@@ -84,23 +105,27 @@ class ReceptorGUI(ttk.Frame):
         self.detection_details_label = ttk.Label(status_process_frame, textvariable=self.detection_details_var, font=('TkFixedFont', 8), wraplength=350)
         self.detection_details_label.grid(row=4, column=0, columnspan=2, sticky="w", padx=2, pady=1)
 
+        # Caixa de texto para mostrar a mensagem final decodificada
         received_msg_frame = ttk.LabelFrame(left_panel, text="Mensagem Final Recebida", padding="10")
         received_msg_frame.pack(fill=tk.BOTH, expand=True, pady=10)
         self.received_message_text = scrolledtext.ScrolledText(received_msg_frame, wrap=tk.WORD, height=4, state="disabled", font=("Helvetica", 12))
         self.received_message_text.pack(fill=tk.BOTH, expand=True)
 
+        # Painel direito: Notebook com abas para gráficos
         plot_container_frame = ttk.LabelFrame(self, text="Gráficos do Sinal Recebido", padding="10")
         plot_container_frame.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
         self.plot_notebook = ttk.Notebook(plot_container_frame)
         self.plot_notebook.pack(fill=tk.BOTH, expand=True)
 
-        self.ax_pre, self.canvas_pre = self.create_plot_tab("Sinal RX")
-        self.ax_post, self.canvas_post = self.create_plot_tab("Bits RX")
-        self.ax_err, self.canvas_err = self.create_plot_tab("Erros no Canal")
-        self.ax_corrigidos, self.canvas_corrigidos = self.create_plot_tab("Bits Corrigidos")
-        self.ax_err_corrigidos, self.canvas_err_corrigidos = self.create_plot_tab("Erros Após Correção")
-
+        # Cria APENAS as abas de gráficos necessárias e armazena referências para atualização
+        self.ax_pre, self.canvas_pre = self.create_plot_tab("Sinal RX (Pré-Demod)")
+        self.ax_post, self.canvas_post = self.create_plot_tab("Bits RX (Pós-Demod)")
+        
     def create_plot_tab(self, name):
+        """
+        Cria uma aba com matplotlib para exibir um gráfico.
+        Retorna o eixo e o canvas para atualizações posteriores.
+        """
         tab = ttk.Frame(self.plot_notebook)
         self.plot_notebook.add(tab, text=name)
         fig, ax = plt.subplots(figsize=(6, 3))
@@ -112,12 +137,18 @@ class ReceptorGUI(ttk.Frame):
         return ax, canvas
 
     def clear_plot_ax(self, ax, canvas, title):
+        """
+        Limpa o gráfico e redesenha título e grade, preparando para novo desenho.
+        """
         ax.clear()
         ax.set_title(title, fontsize=10)
         ax.grid(True, linestyle='--', linewidth=0.5)
         canvas.draw()
 
     def plot_pre_demod(self, data):
+        """
+        Exibe gráfico do sinal analógico recebido no canal antes da demodulação.
+        """
         ax, canvas = self.ax_pre, self.canvas_pre
         self.clear_plot_ax(ax, canvas, "Sinal Recebido no Canal")
         ax.plot(data['t'], data['signal_real'], color='coral', linewidth=1)
@@ -126,6 +157,9 @@ class ReceptorGUI(ttk.Frame):
         canvas.draw()
 
     def plot_post_demod(self, data):
+        """
+        Exibe gráfico dos bits recuperados após demodulação digital.
+        """
         ax, canvas = self.ax_post, self.canvas_post
         config = data['config']
         self.clear_plot_ax(ax, canvas, f"Bits Recuperados ({config['mod_digital_type']})")
@@ -134,56 +168,20 @@ class ReceptorGUI(ttk.Frame):
         ax.set_ylabel("Nível Lógico")
         ax.set_ylim(-1.5, 1.5)
         canvas.draw()
-
-    def plot_error(self, data):
-        ax, canvas = self.ax_err, self.canvas_err
-        self.clear_plot_ax(ax, canvas, "Comparação de Bits com Erros")
-        min_len = min(len(data['ideal_bits']), len(data['received_bits']))
-        ideal = np.array(data['ideal_bits'][:min_len])
-        received = np.array(data['received_bits'][:min_len])
-        t = data['t_ideal'][:min_len]
-        errors = np.where(ideal != received)[0]
-        ax.step(t, ideal, where='post', color='blue', label='Bits Ideais (TX)', lw=0.8)
-        ax.step(t, received, where='post', color='green', linestyle='--', label='Bits RX', lw=0.8)
-        if len(errors) > 0:
-            ax.plot(t[errors], received[errors] + 0.1, 'ro', markersize=4, label=f'{len(errors)} Erros')
-        ax.set_xlabel("Tempo (s)")
-        ax.set_ylabel("Valor")
-        ax.legend(fontsize='small')
-        canvas.draw()
-
-    def plot_corrected_bits(self, data):
-        ax, canvas = self.ax_corrigidos, self.canvas_corrigidos
-        config = data['config']
-        self.clear_plot_ax(ax, canvas, f"Bits Corrigidos ({config['mod_digital_type']})")
-        ax.step(data['t'], data['signal'], where='post', color='purple', linewidth=1.2)
-        ax.set_xlabel("Tempo (s)")
-        ax.set_ylabel("Nível Lógico")
-        ax.set_ylim(-1.5, 1.5)
-        canvas.draw()
-
-    def plot_error_corrected(self, data):
-        ax, canvas = self.ax_err_corrigidos, self.canvas_err_corrigidos
-        self.clear_plot_ax(ax, canvas, "Erros Após Correção")
-        min_len = min(len(data['ideal_bits']), len(data['corrected_bits']))
-        ideal = np.array(data['ideal_bits'][:min_len])
-        corrected = np.array(data['corrected_bits'][:min_len])
-        t = data['t_ideal'][:min_len]
-        errors = np.where(ideal != corrected)[0]
-        ax.step(t, ideal, where='post', color='blue', label='Bits Ideais (TX)', lw=0.8)
-        ax.step(t, corrected, where='post', color='purple', linestyle='--', label='Bits Corrigidos (RX)', lw=0.8)
-        if len(errors) > 0:
-            ax.plot(t[errors], corrected[errors] + 0.1, 'ro', markersize=4, label=f'{len(errors)} Erros')
-        ax.set_xlabel("Tempo (s)")
-        ax.set_ylabel("Valor")
-        ax.legend(fontsize='small')
-        canvas.draw()
+    
+    # As funções plot_error, plot_corrected_bits e plot_error_corrected foram removidas.
+    # Elas não são mais chamadas e não são necessárias para os gráficos desejados.
 
     def process_queue(self):
+        """
+        Loop periódico que processa mensagens da fila vindas da thread do receptor,
+        atualizando a interface conforme o tipo de mensagem recebida.
+        """
         try:
             while not self.update_queue.empty():
                 msg = self.update_queue.get_nowait()
                 msg_type = msg.get('type')
+
                 if msg_type == 'new_connection':
                     self.clear_all_for_new_connection(msg['address'])
                 elif msg_type == 'connection_status':
@@ -200,12 +198,20 @@ class ReceptorGUI(ttk.Frame):
                     self.update_received_message(msg['message'])
                 elif msg_type == 'plot':
                     self.dispatch_plot(msg['tab'], msg['data'])
+        except queue.Empty:
+            pass  # Fila vazia, nada a fazer
+        except Exception as e:
+            print(f"Erro no process_queue: {e}")  # Opcional: logar erro
         finally:
-            self.master.after(100, self.process_queue)
+            self.master.after(100, self.process_queue)  # Reagenda processamento
 
     def update_detection_display(self, data):
+        """
+        Atualiza os labels de status de detecção de erro com base nos dados recebidos.
+        """
         method = data.get('method')
         status = data.get('status')
+        # Define cor conforme status: OK verde, inválido vermelho, neutro preto
         color = "green" if "OK" in status else "red" if "INVÁLIDO" in status else "black"
         self.detection_details_var.set("")
         if method == "Nenhuma":
@@ -220,14 +226,21 @@ class ReceptorGUI(ttk.Frame):
             self.detection_method_var.set("Status CRC-32:")
             self.detection_status_var.set(status)
             self.detection_status_label.config(foreground=color)
+            # Detalhes do cálculo e valor recebido para CRC
             calc = data.get('calc')
             recv = data.get('recv')
             details_text = f"Calculado: 0b{calc:032b}\nRecebido:  0b{recv:032b}"
             self.detection_details_var.set(details_text)
 
     def clear_all_for_new_connection(self, address):
+        """
+        Limpa dados da interface para uma nova conexão,
+        reiniciando variáveis e limpando gráficos e textos.
+        """
         self.connection_status_var.set(f"Conexão de {address}")
         self.connection_status_label.config(foreground='green')
+
+        # Reseta variáveis de status e configuração
         for var in [self.decode_status_var, self.detection_status_var, self.hamming_status_var,
                     self.received_enquadramento_var, self.received_mod_digital_var,
                     self.received_mod_portadora_var, self.received_detecao_erro_var,
@@ -235,46 +248,69 @@ class ReceptorGUI(ttk.Frame):
                     self.received_freq_var, self.received_amplitude_var,
                     self.received_sampling_rate_var, self.received_error_rate_var]:
             var.set("...")
+
         self.detection_method_var.set("Detecção:")
         self.detection_details_var.set("")
+
+        # Limpa caixa de texto da mensagem recebida
         self.received_message_text.config(state="normal")
         self.received_message_text.delete(1.0, tk.END)
         self.received_message_text.config(state="disabled")
+
+        # Limpa todos os gráficos para novo ciclo
+        # Mantém apenas os gráficos "Sinal RX (Pré-Demod)" e "Bits RX (Pós-Demod)"
         for ax, canvas, title in [
-            (self.ax_pre, self.canvas_pre, "Sinal RX"),
-            (self.ax_post, self.canvas_post, "Bits RX"),
-            (self.ax_err, self.canvas_err, "Erros no Canal"),
-            (self.ax_corrigidos, self.canvas_corrigidos, "Bits Corrigidos"),
-            (self.ax_err_corrigidos, self.canvas_err_corrigidos, "Erros Após Correção")
+            (self.ax_pre, self.canvas_pre, "Sinal RX (Pré-Demod)"),
+            (self.ax_post, self.canvas_post, "Bits RX (Pós-Demod)"),
         ]:
             self.clear_plot_ax(ax, canvas, title)
 
     def create_status_row(self, parent, row, text, var):
+        """
+        Cria uma linha de label fixa e outra com texto dinâmico (StringVar)
+        para exibir status na interface.
+        """
         ttk.Label(parent, text=text).grid(row=row, column=0, sticky="w", padx=2, pady=1)
         label = ttk.Label(parent, textvariable=var)
         label.grid(row=row, column=1, sticky="w", padx=2, pady=1)
         return label
 
     def start_listening_thread(self):
+        """
+        Inicia thread daemon que roda o receptor na função run_receiver,
+        que envia atualizações via callback para a GUI.
+        """
         thread = threading.Thread(target=receptor.run_receiver, args=(self.gui_update_callback,))
         thread.daemon = True
         thread.start()
 
     def gui_update_callback(self, msg):
+        """
+        Callback chamada pela thread do receptor para colocar mensagens
+        na fila da GUI, garantindo thread-safe.
+        """
         self.update_queue.put(msg)
 
     def update_status_var(self, label, var, msg):
+        """
+        Atualiza texto e cor de um status específico da interface.
+        """
         var.set(msg['message'])
         label.config(foreground=msg['color'])
 
     def dispatch_plot(self, tab, data):
+        """
+        Dispara atualização de gráficos conforme aba e dados recebidos.
+        """
         if tab == 'pre_demod': self.plot_pre_demod(data)
         elif tab == 'post_demod': self.plot_post_demod(data)
-        elif tab == 'error': self.plot_error(data)
-        elif tab == 'corrected_bits': self.plot_corrected_bits(data)
-        elif tab == 'error_corrected': self.plot_error_corrected(data)
+        # As chamadas para plot_error, plot_corrected_bits e plot_error_corrected foram removidas.
+        # Elas não são mais necessárias, pois os gráficos correspondentes foram removidos.
 
     def update_received_configs(self, data):
+        """
+        Atualiza variáveis que mostram configurações recebidas na interface.
+        """
         self.received_enquadramento_var.set(data.get("enquadramento_type"))
         self.received_mod_digital_var.set(data.get("mod_digital_type"))
         self.received_mod_portadora_var.set(data.get("mod_portadora_type"))
@@ -287,6 +323,9 @@ class ReceptorGUI(ttk.Frame):
         self.received_error_rate_var.set(f"{data.get('taxa_erros'):.3f}")
 
     def update_received_message(self, message):
+        """
+        Atualiza caixa de texto com a mensagem final decodificada recebida.
+        """
         self.received_message_text.config(state="normal")
         self.received_message_text.delete(1.0, tk.END)
         self.received_message_text.insert(tk.END, message)
