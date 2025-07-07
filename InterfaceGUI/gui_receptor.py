@@ -27,7 +27,7 @@ class ReceptorGUI(ttk.Frame):
         self._create_widgets()
 
         self.start_listening_thread()  # Inicia thread para receber dados
-        self.process_queue()            # Começa processamento periódico da fila
+        self.process_queue()           # Começa processamento periódico da fila
 
     def _create_variables(self):
         """
@@ -117,13 +117,10 @@ class ReceptorGUI(ttk.Frame):
         self.plot_notebook = ttk.Notebook(plot_container_frame)
         self.plot_notebook.pack(fill=tk.BOTH, expand=True)
 
-        # Cria abas de gráficos e armazena referências para atualização
-        self.ax_pre, self.canvas_pre = self.create_plot_tab("Sinal RX")
-        self.ax_post, self.canvas_post = self.create_plot_tab("Bits RX")
-        self.ax_err, self.canvas_err = self.create_plot_tab("Erros no Canal")
-        self.ax_corrigidos, self.canvas_corrigidos = self.create_plot_tab("Bits Corrigidos")
-        self.ax_err_corrigidos, self.canvas_err_corrigidos = self.create_plot_tab("Erros Após Correção")
-
+        # Cria APENAS as abas de gráficos necessárias e armazena referências para atualização
+        self.ax_pre, self.canvas_pre = self.create_plot_tab("Sinal RX (Pré-Demod)")
+        self.ax_post, self.canvas_post = self.create_plot_tab("Bits RX (Pós-Demod)")
+        
     def create_plot_tab(self, name):
         """
         Cria uma aba com matplotlib para exibir um gráfico.
@@ -171,61 +168,9 @@ class ReceptorGUI(ttk.Frame):
         ax.set_ylabel("Nível Lógico")
         ax.set_ylim(-1.5, 1.5)
         canvas.draw()
-
-    def plot_error(self, data):
-        """
-        Mostra comparação entre bits ideais transmitidos e bits recebidos,
-        marcando erros com pontos vermelhos.
-        """
-        ax, canvas = self.ax_err, self.canvas_err
-        self.clear_plot_ax(ax, canvas, "Comparação de Bits com Erros")
-        min_len = min(len(data['ideal_bits']), len(data['received_bits']))
-        ideal = np.array(data['ideal_bits'][:min_len])
-        received = np.array(data['received_bits'][:min_len])
-        t = data['t_ideal'][:min_len]
-        errors = np.where(ideal != received)[0]
-        ax.step(t, ideal, where='post', color='blue', label='Bits Ideais (TX)', lw=0.8)
-        ax.step(t, received, where='post', color='green', linestyle='--', label='Bits RX', lw=0.8)
-        if len(errors) > 0:
-            ax.plot(t[errors], received[errors] + 0.1, 'ro', markersize=4, label=f'{len(errors)} Erros')
-        ax.set_xlabel("Tempo (s)")
-        ax.set_ylabel("Valor")
-        ax.legend(fontsize='small')
-        canvas.draw()
-
-    def plot_corrected_bits(self, data):
-        """
-        Exibe gráfico dos bits após correção de erros.
-        """
-        ax, canvas = self.ax_corrigidos, self.canvas_corrigidos
-        config = data['config']
-        self.clear_plot_ax(ax, canvas, f"Bits Corrigidos ({config['mod_digital_type']})")
-        ax.step(data['t'], data['signal'], where='post', color='purple', linewidth=1.2)
-        ax.set_xlabel("Tempo (s)")
-        ax.set_ylabel("Nível Lógico")
-        ax.set_ylim(-1.5, 1.5)
-        canvas.draw()
-
-    def plot_error_corrected(self, data):
-        """
-        Exibe comparação entre bits ideais e bits corrigidos,
-        destacando erros remanescentes.
-        """
-        ax, canvas = self.ax_err_corrigidos, self.canvas_err_corrigidos
-        self.clear_plot_ax(ax, canvas, "Erros Após Correção")
-        min_len = min(len(data['ideal_bits']), len(data['corrected_bits']))
-        ideal = np.array(data['ideal_bits'][:min_len])
-        corrected = np.array(data['corrected_bits'][:min_len])
-        t = data['t_ideal'][:min_len]
-        errors = np.where(ideal != corrected)[0]
-        ax.step(t, ideal, where='post', color='blue', label='Bits Ideais (TX)', lw=0.8)
-        ax.step(t, corrected, where='post', color='purple', linestyle='--', label='Bits Corrigidos (RX)', lw=0.8)
-        if len(errors) > 0:
-            ax.plot(t[errors], corrected[errors] + 0.1, 'ro', markersize=4, label=f'{len(errors)} Erros')
-        ax.set_xlabel("Tempo (s)")
-        ax.set_ylabel("Valor")
-        ax.legend(fontsize='small')
-        canvas.draw()
+    
+    # As funções plot_error, plot_corrected_bits e plot_error_corrected foram removidas.
+    # Elas não são mais chamadas e não são necessárias para os gráficos desejados.
 
     def process_queue(self):
         """
@@ -313,12 +258,10 @@ class ReceptorGUI(ttk.Frame):
         self.received_message_text.config(state="disabled")
 
         # Limpa todos os gráficos para novo ciclo
+        # Mantém apenas os gráficos "Sinal RX (Pré-Demod)" e "Bits RX (Pós-Demod)"
         for ax, canvas, title in [
-            (self.ax_pre, self.canvas_pre, "Sinal RX"),
-            (self.ax_post, self.canvas_post, "Bits RX"),
-            (self.ax_err, self.canvas_err, "Erros no Canal"),
-            (self.ax_corrigidos, self.canvas_corrigidos, "Bits Corrigidos"),
-            (self.ax_err_corrigidos, self.canvas_err_corrigidos, "Erros Após Correção")
+            (self.ax_pre, self.canvas_pre, "Sinal RX (Pré-Demod)"),
+            (self.ax_post, self.canvas_post, "Bits RX (Pós-Demod)"),
         ]:
             self.clear_plot_ax(ax, canvas, title)
 
@@ -361,9 +304,8 @@ class ReceptorGUI(ttk.Frame):
         """
         if tab == 'pre_demod': self.plot_pre_demod(data)
         elif tab == 'post_demod': self.plot_post_demod(data)
-        elif tab == 'error': self.plot_error(data)
-        elif tab == 'corrected_bits': self.plot_corrected_bits(data)
-        elif tab == 'error_corrected': self.plot_error_corrected(data)
+        # As chamadas para plot_error, plot_corrected_bits e plot_error_corrected foram removidas.
+        # Elas não são mais necessárias, pois os gráficos correspondentes foram removidos.
 
     def update_received_configs(self, data):
         """
