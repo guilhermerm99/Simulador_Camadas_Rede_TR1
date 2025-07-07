@@ -36,7 +36,7 @@ class TransmissorGUI(ttk.Frame):
 
     def _create_widgets(self):
         # --- Grid Principal ---
-        self.grid_columnconfigure(0, weight=1, minsize=400)
+        self.grid_columnconfigure(0, weight=1, minsize=500)
         self.grid_columnconfigure(1, weight=2)
         self.grid_rowconfigure(0, weight=1)
 
@@ -80,7 +80,7 @@ class TransmissorGUI(ttk.Frame):
         self.status_label.pack(fill=tk.BOTH, expand=True)
 
         # --- Painel Direito (Gráficos) ---
-        plot_container = ttk.LabelFrame(self, text="Gráficos do Sinal Transmitido", padding="10")
+        plot_container = ttk.LabelFrame(self, text="Gráficos do Sinal Transmitido", padding="7.5")
         plot_container.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
 
         self.plot_notebook = ttk.Notebook(plot_container)
@@ -88,7 +88,6 @@ class TransmissorGUI(ttk.Frame):
 
         self.ax_digital, self.canvas_digital = self.create_plot_tab("Sinal Digital")
         self.ax_analog, self.canvas_analog = self.create_plot_tab("Sinal Modulado")
-        self.ax_const, self.canvas_const = self.create_plot_tab("Constelação")
 
     def create_control_row(self, parent, row, label_text, widget):
         ttk.Label(parent, text=label_text).grid(row=row, column=0, sticky="w", padx=5, pady=2)
@@ -96,12 +95,24 @@ class TransmissorGUI(ttk.Frame):
 
     def create_plot_tab(self, tab_name):
         tab = ttk.Frame(self.plot_notebook)
+        tab.pack_propagate(False)
         self.plot_notebook.add(tab, text=tab_name)
-        fig, ax = plt.subplots(figsize=(10, 3))
-        plt.tight_layout()
+        fig, ax = plt.subplots(figsize=(8, 3.5))
+        fig.tight_layout(pad=2.5)
         canvas = FigureCanvasTkAgg(fig, master=tab)
-        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        widget = canvas.get_tk_widget()
+        widget.pack(fill=tk.BOTH, expand=True)
+        widget.config(width=800, height=320)
         self.clear_plot_ax(ax, canvas, title=tab_name)
+        # LEGENDA DE EIXOS FORA DO GRÁFICO
+        if "Digital" in tab_name:
+            legenda_eixo = "Eixo X: Tempo (s)   |   Eixo Y: Nível Lógico"
+        elif "Modulado" in tab_name:
+            legenda_eixo = "Eixo X: Tempo (s)   |   Eixo Y: Amplitude"
+        else:
+            legenda_eixo = "Eixo X: Tempo (s)   |   Eixo Y: valor"
+        label_eixos = ttk.Label(tab, text=legenda_eixo, foreground="gray", font=("Arial", 9, "italic"))
+        label_eixos.pack(side=tk.BOTTOM, pady=2)
         return ax, canvas
 
     def start_transmission_thread(self):
@@ -140,57 +151,51 @@ class TransmissorGUI(ttk.Frame):
                     self.update_digital_plot(msg['data'])
                 elif msg_type == 'plot_analog':
                     self.update_analog_plot(msg['data'])
-                elif msg_type == 'plot_constellation':
-                    self.update_constellation_plot(msg['data'])
         finally:
             self.master.after(100, self.process_queue)
 
     def clear_all(self):
         self.clear_plot_ax(self.ax_digital, self.canvas_digital, "Sinal Digital")
         self.clear_plot_ax(self.ax_analog, self.canvas_analog, "Sinal Modulado")
-        self.clear_plot_ax(self.ax_const, self.canvas_const, "Constelação")
 
     def clear_plot_ax(self, ax, canvas, title):
         ax.clear()
-        ax.set_title(title, fontsize=10)
-        ax.grid(True)
-        plt.tight_layout()
+        ax.set_title(title, fontsize=11)
+        ax.grid(True, linestyle='--', linewidth=0.5, alpha=0.8)
         canvas.draw()
 
     def update_digital_plot(self, plot_data):
         ax, canvas = self.ax_digital, self.canvas_digital
         t, signal, config = plot_data['t'], plot_data['signal'], plot_data['config']
         self.clear_plot_ax(ax, canvas, f"Sinal Digital ({config['mod_digital_type']})")
-        ax.step(t, signal, where='post')
+        ax.step(t, signal, where='post', label=f"{config['mod_digital_type']}", color='dodgerblue', linewidth=1)
         ax.set_xlabel("Tempo (s)")
-        ax.set_ylabel("Nível")
+        #ax.set_ylabel("Nível")
         if len(signal) > 0:
             ax.set_ylim(min(signal)-0.5, max(signal)+0.5)
+            ax.set_xlim(left=0, right=max(t) if len(t) > 0 else 1)
+        ax.margins(x=0)
+        ax.legend(loc='upper right', fontsize='small', framealpha=0.92, bbox_to_anchor=(1,1), borderaxespad=0.1)
+        fig = ax.figure
+        #fig.tight_layout(pad=2.5)
         canvas.draw()
         
     def update_analog_plot(self, plot_data):
         ax, canvas = self.ax_analog, self.canvas_analog
         t, signal, config = plot_data['t'], plot_data['signal'], plot_data['config']
         self.clear_plot_ax(ax, canvas, f"Sinal Modulado ({config['mod_portadora_type']})")
-        ax.plot(t, signal)
+        ax.plot(t, signal, label=f"{config['mod_portadora_type']}", color='coral', linewidth=1)
         ax.set_xlabel("Tempo (s)")
-        ax.set_ylabel("Amplitude")
+        # ax.set_ylabel("Amplitude")
         if len(t) > 0:
             display_duration = min(t[-1], 20 / config['bit_rate'])
             ax.set_xlim(0, display_duration)
+            ax.set_xlim(left=0, right=max(t) if len(t) > 0 else 1)
+        ax.margins(x=0)
+        ax.legend(loc='upper right', fontsize='small', framealpha=0.92, bbox_to_anchor=(1,1), borderaxespad=0.1)
+        #fig.tight_layout(pad=2.5)
         canvas.draw()
-
-    def update_constellation_plot(self, plot_data):
-        ax, canvas = self.ax_const, self.canvas_const
-        points = plot_data['points']
-        self.clear_plot_ax(ax, canvas, "Constelação 8-QAM (TX)")
-        ax.scatter([p.real for p in points], [p.imag for p in points], marker='o')
-        ax.axhline(0, color='grey', lw=0.5)
-        ax.axvline(0, color='grey', lw=0.5)
-        ax.set_xlabel("Em Fase (I)")
-        ax.set_ylabel("Quadratura (Q)")
-        canvas.draw()
-        
+            
 if __name__ == '__main__':
     root = tk.Tk()
     app = TransmissorGUI(root)
