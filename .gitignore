@@ -1,20 +1,21 @@
-# Ambientes virtuais
-venv/
-venv_windows/
-
-# Arquivos temporários
+# Python
 __pycache__/
-*.py[cod]
-*.log
-*.sqlite3
-
-# Arquivos do VSCode
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.ipynb_checkpoints/
+.mypy_cache/
+.pytest_cache/
 .vscode/
 
-# Jupyter
-.ipynb_checkpoints/
+# Matplotlib cache
+.matplotlib/
 
-# Outros
-.DS_Store
-*.swp
-*.bak
+# Logs
+*.log
+
+requirements.txt
