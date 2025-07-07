@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 def text_to_binary(text):
     """
     Converte uma string de texto para uma sequência contínua de bits (ASCII 8 bits por caractere).
-    Função típica da Camada de Aplicação/Apresentação, preparando o dado para transmissão binária.
+    Função típica das camadas supeiores preparando o dado para transmissão binária.
 
     Args:
         text (str): Texto de entrada.
@@ -17,7 +17,7 @@ def text_to_binary(text):
 def binary_to_text(binary_str):
     """
     Converte uma string de bits contínua em texto ASCII, considerando grupos de 8 bits por caractere.
-    Fundamental para reconstruir o dado na Camada de Aplicação após a recepção.
+    Fundamental para reconstruir o dado nas camadas supeiores após a recepção.
 
     Args:
         binary_str (str): String de bits concatenados.

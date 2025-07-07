@@ -56,7 +56,7 @@ class ReceptorGUI(ttk.Frame):
         o status da comunicação, resultados de processamento e parâmetros recebidos.
         Variáveis vinculam a lógica do backend com a interface gráfica.
         """
-        self.connection_status_var = tk.StringVar(value="Iniciando...")      # Status da conexão TCP/IP (camada de transporte).
+        self.connection_status_var = tk.StringVar(value="Iniciando...")      # Status da conexão TCP/IP.
         self.decode_status_var = tk.StringVar(value="Inativo")               # Status geral da decodificação do pacote recebido.
         self.detection_method_var = tk.StringVar(value="Detecção:")          # Tipo de método de detecção de erro (camada de enlace).
         self.detection_status_var = tk.StringVar(value="N/A")                # Resultado da detecção de erro (ex: "OK", "INVÁLIDO").
