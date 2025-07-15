@@ -37,7 +37,7 @@ def binary_to_text(binary_str):
 def plot_signal(time_or_x, signal, title, xlabel="Tempo (s)", ylabel="Amplitude (V)", is_digital=False):
     """
     Plota um sinal (digital ou analógico) para análise de transmissão/recepção.
-    Usado em contextos da Camada Física (banda base e passa-faixa) e para depuração em projetos didáticos.
+    Usado em contextos da Camada Física (banda base e passa-faixa) e para depuração.
 
     Args:
         time_or_x (array-like): Eixo X (tempo ou índice de amostra).

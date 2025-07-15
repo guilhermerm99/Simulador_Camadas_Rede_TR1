@@ -36,14 +36,19 @@ class TransmissorGUI(ttk.Frame):
         self.update_queue = queue.Queue()
 
         # Variáveis de controle para configuração e entrada da transmissão.
-        self.msg_var = tk.StringVar(value="00000")                 # Mensagem a ser transmitida (binário/texto).
-        self.raw_binary_input = tk.BooleanVar(value=True)          # Se True, entrada é binário puro; se False, texto para conversão.
+        self.msg_var = tk.StringVar(value="00000") # Mensagem a ser transmitida (binário/texto).
+        self.raw_binary_input = tk.BooleanVar(value=True) # Se True, entrada é binário puro; se False, texto para conversão.
         self.enquadramento_var = tk.StringVar(value='Bit Stuffing (Flags)') # Camada de Enlace: enquadramento.
-        self.mod_digital_var = tk.StringVar(value='NRZ-Polar')     # Camada Física (banda base): codificação de linha.
-        self.mod_portadora_var = tk.StringVar(value='Nenhum')      # Camada Física (passa-faixa): modulação de portadora.
-        self.detecao_erro_var = tk.StringVar(value='CRC-32')       # Camada de Enlace: detecção de erro.
-        self.correcao_erro_var = tk.StringVar(value='Hamming')     # Camada de Enlace: correção de erro.
-        self.taxa_erros_var = tk.DoubleVar(value=0.01)             # Taxa de erro no canal (ruído/interferência).
+        self.mod_digital_var = tk.StringVar(value='NRZ-Polar') # Camada Física (banda base): codificação de linha.
+        self.mod_portadora_var = tk.StringVar(value='Nenhum') # Camada Física (passa-faixa): modulação de portadora.
+        self.detecao_erro_var = tk.StringVar(value='CRC-32') # Camada de Enlace: detecção de erro.
+        self.correcao_erro_var = tk.StringVar(value='Hamming') # Camada de Enlace: correção de erro.
+        self.taxa_erros_var = tk.DoubleVar(value=0.01) # Taxa de erro no canal (ruído/interferência).
+
+        # Variáveis para exibir o quadro antes e depois do Bit Stuffing/Framing
+        self.frame_before_stuffing_var = tk.StringVar(value="N/A")
+        self.frame_after_stuffing_var = tk.StringVar(value="N/A")
+
 
         # Cria e posiciona todos os widgets da interface.
         self._create_widgets()
@@ -73,8 +78,8 @@ class TransmissorGUI(ttk.Frame):
         enquadramento_options = ["Contagem de caracteres", "Byte Stuffing (Flags)", "Bit Stuffing (Flags)"]
         detecao_erro_options = ["Nenhum", "Paridade Par", "CRC-32"]
         correcao_erro_options = ["Nenhum", "Hamming"]
-        mod_digital_options = ["NRZ-Polar", "Manchester", "Bipolar"]     # Camada Física: banda base.
-        mod_portadora_options = ["Nenhum", "ASK", "FSK", "8-QAM"]        # Camada Física: passa-faixa.
+        mod_digital_options = ["NRZ-Polar", "Manchester", "Bipolar"] # Camada Física: banda base.
+        mod_portadora_options = ["Nenhum", "ASK", "FSK", "8-QAM"] # Camada Física: passa-faixa.
 
         # Linha de entrada da mensagem.
         self.create_control_row(config_frame, 0, "Mensagem:", ttk.Entry(config_frame, textvariable=self.msg_var))
@@ -95,6 +100,20 @@ class TransmissorGUI(ttk.Frame):
         error_scale.grid(row=7, column=0, columnspan=2, sticky="ew", padx=5)
         self.error_label = ttk.Label(config_frame, text=f"{self.taxa_erros_var.get():.3f}")
         self.error_label.grid(row=8, column=0, columnspan=2, sticky="w", padx=5)
+
+        # --- Campos para exibir o quadro antes e depois do Bit Stuffing ---
+        frame_display_frame = ttk.LabelFrame(left_panel, text="Detalhes do Enquadramento", padding="10")
+        frame_display_frame.pack(fill=tk.X, pady=5)
+        frame_display_frame.grid_columnconfigure(1, weight=1)
+
+        ttk.Label(frame_display_frame, text="Quadro (Pré-Enquadramento):").grid(row=0, column=0, sticky="w", padx=5, pady=2)
+        self.frame_before_stuffing_label = ttk.Label(frame_display_frame, textvariable=self.frame_before_stuffing_var, wraplength=400, justify=tk.LEFT, font=('TkFixedFont', 9))
+        self.frame_before_stuffing_label.grid(row=0, column=1, sticky="ew", padx=5, pady=2)
+
+        ttk.Label(frame_display_frame, text="Quadro (Pós-Enquadramento):").grid(row=1, column=0, sticky="w", padx=5, pady=2)
+        self.frame_after_stuffing_label = ttk.Label(frame_display_frame, textvariable=self.frame_after_stuffing_var, wraplength=400, justify=tk.LEFT, font=('TkFixedFont', 9))
+        self.frame_after_stuffing_label.grid(row=1, column=1, sticky="ew", padx=5, pady=2)
+        # -------------------------------------------------------------------------
 
         # Botão para iniciar transmissão de dados ao receptor.
         self.send_button = ttk.Button(left_panel, text="Iniciar Transmissão", command=self.start_transmission_thread)
@@ -123,7 +142,7 @@ class TransmissorGUI(ttk.Frame):
         """
         Cria uma linha padrão composta por rótulo e widget de entrada/seleção.
         Usado para montar painéis de configuração na GUI.
-        
+
         Args:
             parent (ttk.Frame): Frame onde será inserida a linha.
             row (int): Posição da linha na grid.
@@ -138,7 +157,7 @@ class TransmissorGUI(ttk.Frame):
         Cria uma nova aba de gráficos, integrando figura Matplotlib,
         canvas Tkinter e barra de ferramentas de navegação padrão.
         Facilita a análise visual dos sinais gerados nas diferentes etapas do transmissor.
-        
+
         Args:
             tab_name (str): Nome da aba e título inicial do gráfico.
             figsize (tuple): Tamanho da figura Matplotlib em polegadas.
@@ -153,7 +172,7 @@ class TransmissorGUI(ttk.Frame):
         canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
         toolbar = NavigationToolbar2Tk(canvas, tab)
         toolbar.update()
-        canvas._tkcanvas.pack(fill=tk.BOTH, expand=True)  # Necessário para a barra de ferramentas.
+        canvas._tkcanvas.pack(fill=tk.BOTH, expand=True) # Necessário para a barra de ferramentas.
         self.clear_plot_ax(ax, canvas, title=tab_name)
         return ax, canvas, toolbar
 
@@ -163,7 +182,11 @@ class TransmissorGUI(ttk.Frame):
         Valida a entrada, desabilita o botão, limpa gráficos e status antes de transmitir.
         """
         self.send_button.config(state="disabled")
-        self.clear_all()  # Limpa gráficos e status para nova simulação.
+        self.clear_all() # Limpa gráficos e status para nova simulação.
+
+        # Limpa os campos de quadro antes e depois do stuffing
+        self.frame_before_stuffing_var.set("N/A")
+        self.frame_after_stuffing_var.set("N/A")
 
         message_input = self.msg_var.get()
 
@@ -185,19 +208,20 @@ class TransmissorGUI(ttk.Frame):
 
         # Prepara parâmetros para a transmissão (define comportamento das camadas OSI).
         params = {
-            "message": original_message_for_log,                # Mensagem original (texto/binário).
-            "bits_raw_input": bits_to_send,                     # Sequência de bits a ser transmitida.
+            "message": original_message_for_log, # Mensagem original (texto/binário).
+            "bits_raw_input": bits_to_send, # Sequência de bits a ser transmitida.
             "enquadramento_type": self.enquadramento_var.get(), # Camada de Enlace: enquadramento.
-            "mod_digital_type": self.mod_digital_var.get(),     # Camada Física: codificação de linha.
+            "mod_digital_type": self.mod_digital_var.get(), # Camada Física: codificação de linha.
             "mod_portadora_type": self.mod_portadora_var.get(), # Camada Física: modulação de portadora.
-            "detecao_erro_type": self.detecao_erro_var.get(),   # Camada de Enlace: detecção de erro.
+            "detecao_erro_type": self.detecao_erro_var.get(), # Camada de Enlace: detecção de erro.
             "correcao_erro_type": self.correcao_erro_var.get(), # Camada de Enlace: correção de erro.
-            "taxa_erros": self.taxa_erros_var.get()             # Taxa de erro simulada no canal.
+            "taxa_erros": self.taxa_erros_var.get(), # Taxa de erro simulada no canal.
+            "gui_callback": self.gui_update_callback # Passa o callback para o módulo transmissor
         }
 
         # Executa função de transmissão em nova thread, mantendo interface fluida.
-        thread = threading.Thread(target=transmissor.run_transmitter, args=(params, self.gui_update_callback))
-        thread.daemon = True  # Encerra thread automaticamente com o fechamento da GUI.
+        thread = threading.Thread(target=transmissor.run_transmitter, args=(params,))
+        thread.daemon = True # Encerra thread automaticamente com o fechamento da GUI.
         thread.start()
 
     def gui_update_callback(self, update_dict):
@@ -205,7 +229,7 @@ class TransmissorGUI(ttk.Frame):
         Callback chamada pela thread de transmissão para enviar atualizações à GUI.
         Garante comunicação thread-safe: insere as mensagens na fila de atualizações,
         para processamento exclusivo na thread principal do Tkinter.
-        
+
         Args:
             update_dict (dict): Dicionário com o tipo de atualização e dados associados.
         """
@@ -229,11 +253,15 @@ class TransmissorGUI(ttk.Frame):
                     if "concluída" in msg['message'] or "Erro" in msg['message']:
                         self.send_button.config(state="normal")
                 elif msg_type == 'plot_digital':
-                    self.update_digital_plot(msg['data'])       # Atualiza o gráfico de sinal digital (banda base).
+                    self.update_digital_plot(msg['data']) # Atualiza o gráfico de sinal digital (banda base).
                 elif msg_type == 'plot_analog':
-                    self.update_analog_plot(msg['data'])        # Atualiza o gráfico do sinal analógico modulado.
+                    self.update_analog_plot(msg['data']) # Atualiza o gráfico do sinal analógico modulado.
                 elif msg_type == 'plot_constellation':
                     self.update_constellation_plot(msg['data']) # Atualiza o gráfico da constelação 8-QAM.
+                elif msg_type == 'frame_display': # Atualiza a exibição dos quadros
+                    self.update_frame_display(msg['data'])
+                elif msg_type == 'log': 
+                    pass 
         finally:
             # Agenda a próxima verificação após 100 ms (mantém loop de eventos da GUI).
             self.master.after(100, self.process_queue)
@@ -246,6 +274,10 @@ class TransmissorGUI(ttk.Frame):
         self.clear_plot_ax(self.ax_digital, self.canvas_digital, "Sinal Digital")
         self.clear_plot_ax(self.ax_analog, self.canvas_analog, "Sinal Modulado")
         self.clear_plot_ax(self.ax_const, self.canvas_const, "Constelação 8-QAM (TX)")
+        # Também limpa os campos de texto do quadro
+        self.frame_before_stuffing_var.set("N/A")
+        self.frame_after_stuffing_var.set("N/A")
+
 
     def clear_plot_ax(self, ax, canvas, title):
         """
@@ -265,7 +297,7 @@ class TransmissorGUI(ttk.Frame):
         """
         Atualiza o gráfico de sinal digital gerado pela codificação de linha (Camada Física - Banda Base).
         Exibe a sequência de bits processada por técnicas como NRZ-Polar, Manchester ou Bipolar.
-        
+
         Args:
             plot_data (dict): Contém 't' (tempo), 'signal' (valores do sinal digital), e 'config' (parâmetros de transmissão).
         """
@@ -303,7 +335,7 @@ class TransmissorGUI(ttk.Frame):
         """
         Atualiza o gráfico do sinal modulado (analógico), pronto para transmissão (Camada Física - Passa-faixa).
         Mostra o resultado da modulação por portadora (ASK, FSK, QAM etc) do sinal digital.
-        
+
         Args:
             plot_data (dict): Contém 't' (tempo), 'signal' (sinal analógico), e 'config' (parâmetros de transmissão).
         """
@@ -330,19 +362,21 @@ class TransmissorGUI(ttk.Frame):
         """
         Atualiza o gráfico do diagrama de constelação para modulações como 8-QAM (Camada Física).
         Cada ponto representa um símbolo transmitido no plano I (Em Fase) e Q (Quadratura).
-        
+
         Args:
             plot_data (dict): Contém 'points' (lista de números complexos representando a constelação).
         """
         ax, canvas = self.ax_const, self.canvas_const
         points = plot_data['points']
         self.clear_plot_ax(ax, canvas, "Constelação 8-QAM (TX)")
-        
+
+
         # Separa os pontos em suas componentes de fase (I) e quadratura (Q).
         real = [p.real for p in points]
         imag = [p.imag for p in points]
         ax.scatter(real, imag, color='purple', s=40, alpha=0.8)
-        
+
+
         # Linhas de referência dos eixos centrais (I=0, Q=0).
         ax.axhline(0, color='gray', lw=0.5)
         ax.axvline(0, color='gray', lw=0.5)
@@ -360,13 +394,32 @@ class TransmissorGUI(ttk.Frame):
             ax.set_xlim(-1.5, 1.5)
             ax.set_ylim(-1.5, 1.5)
 
-        ax.set_aspect('equal', 'box')  # Garante escala igual nos eixos.
+
+
+        ax.set_aspect('equal', 'box') # Garante escala igual nos eixos.
+
+
 
         # Anota cada ponto da constelação com identificadores (S0, S1...), ligeiramente deslocados.
         for i, point in enumerate(points):
             ax.annotate(f'S{i}', (point.real + 0.05, point.imag + 0.05), fontsize=8)
-        
+
+
         canvas.draw()
+
+    # --- MÉTODO PARA ATUALIZAR OS TEXTOS DOS QUADROS ---
+    def update_frame_display(self, frame_data):
+        """
+        Atualiza os labels na GUI com os valores binários do quadro antes e depois do enquadramento.
+
+        Args:
+            frame_data (dict): Dicionário contendo 'payload_before_stuffing' e 'frame_after_stuffing'.
+        """
+        if 'payload_before_stuffing' in frame_data:
+            self.frame_before_stuffing_var.set(frame_data['payload_before_stuffing'])
+        if 'frame_after_stuffing' in frame_data:
+            self.frame_after_stuffing_var.set(frame_data['frame_after_stuffing'])
+    # --------------------------------------------------------
 
 if __name__ == '__main__':
     # Inicializa e executa a aplicação GUI do Transmissor.
